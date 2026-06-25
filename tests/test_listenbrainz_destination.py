@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 
-from durable_sync.core import Record
+from durable_sync.core import DestinationHTTPError, Record
 from durable_sync.linkstore import InMemoryLinkStore
 
 from durable_sync_contrib.listenbrainz import api
@@ -110,6 +110,21 @@ def test_already_loved_skips_redundant_submit_but_still_links(monkeypatch):
             assert await store.get_all() == {"ISRC-A": "mbid-a"}
 
     asyncio.run(run())
+
+
+def test_is_auth_error_scopes_to_listenbrainz_not_musicbrainz():
+    # A rejected ListenBrainz token IS re-authorizable -> pause. A MusicBrainz 401/403
+    # is a secondary-service hiccup -> must NOT pause (no re-auth fixes it).
+    lb_401 = DestinationHTTPError(401, "ListenBrainz POST feedback -> 401: Invalid authorization token.")
+    mb_403 = DestinationHTTPError(403, "MusicBrainz GET /isrc/X -> 403: blocked")
+    assert ListenBrainzDestination.is_auth_error(lb_401) is True
+    assert ListenBrainzDestination.is_auth_error(mb_403) is False
+    # ...and through the wrapping real errors arrive in (cause chain + ExceptionGroup)
+    wrapped = RuntimeError("sync failed")
+    wrapped.__cause__ = mb_403
+    assert ListenBrainzDestination.is_auth_error(wrapped) is False
+    assert ListenBrainzDestination.is_auth_error(ExceptionGroup("tg", [mb_403])) is False
+    assert ListenBrainzDestination.is_auth_error(ExceptionGroup("tg", [lb_401])) is True
 
 
 def test_update_is_noop(monkeypatch):

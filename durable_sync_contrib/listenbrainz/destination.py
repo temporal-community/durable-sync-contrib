@@ -32,6 +32,23 @@ from durable_sync_contrib.listenbrainz.config import ListenBrainzConfig
 log = logging.getLogger("durable_sync_contrib.listenbrainz")
 
 
+def _chain_text(err: BaseException) -> str:
+    """Lowercased text of an exception + its __cause__ chain + ExceptionGroup leaves
+    — used to tell WHICH service an auth-class error actually came from."""
+    parts: list[str] = []
+
+    def visit(e: BaseException | None, depth: int) -> None:
+        if e is None or depth > 20:
+            return
+        parts.append(str(e))
+        for sub in getattr(e, "exceptions", ()) or ():
+            visit(sub, depth + 1)
+        visit(e.__cause__, depth + 1)
+
+    visit(err, 0)
+    return " ".join(parts).lower()
+
+
 class ListenBrainzDestination:
     name = "listenbrainz"
 
@@ -56,8 +73,18 @@ class ListenBrainzDestination:
 
     @staticmethod
     def is_auth_error(err: BaseException) -> bool:
-        """A rejected user token (401). Shared word-boundary matcher."""
-        return auth_error_in_chain(err)
+        """Only a rejected ListenBrainz user token (401) is re-authorizable, so only
+        that should PAUSE the workflow. MusicBrainz (the ISRC->MBID resolver) is a
+        SECONDARY service; its 401/403 (a blocked User-Agent, a transient block) is
+        NOT fixed by re-auth, so it must stay transient/retryable instead of pausing.
+        Detect an auth-class error with the shared matcher, then exclude the case
+        where it came from MusicBrainz rather than ListenBrainz."""
+        if not auth_error_in_chain(err):
+            return False
+        text = _chain_text(err)
+        if "musicbrainz" in text and "listenbrainz" not in text:
+            return False  # secondary-service failure — don't pause for re-auth
+        return True
 
 
 class _ListenBrainzSession:
