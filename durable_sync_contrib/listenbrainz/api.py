@@ -112,3 +112,63 @@ async def get_loved_mbids(client: httpx.AsyncClient, token: str, user_name: str)
         if len(feedback) < 100:
             return out
         offset += len(feedback)
+
+
+# --- read path: a page of loved feedback (used by ListenBrainzSource) --------
+
+LOVED_PAGE = 100  # ListenBrainz get-feedback max count per page.
+
+
+async def list_loved_page(
+    client: httpx.AsyncClient, user_name: str, *, token: str = "",
+    offset: int = 0, count: int = LOVED_PAGE,
+) -> tuple[list[dict[str, Any]], int | None]:
+    """ONE page of this user's loved feedback. Returns (items, next_offset) where
+    each item is ListenBrainz's feedback object ({recording_mbid, track_metadata,
+    …}) and next_offset is None on the last page. Reading feedback is public, so
+    `token` is optional (sent only when provided)."""
+    r = await request_with_retry(
+        client, "GET", f"{LB_BASE_URL}/1/feedback/user/{user_name}/get-feedback",
+        headers=_auth(token) if token else {"Accept": "application/json"},
+        params={"score": LOVED, "count": count, "offset": offset},
+    )
+    if r.status_code >= 400:
+        raise DestinationHTTPError(
+            r.status_code, f"ListenBrainz GET feedback -> {r.status_code}: {r.text[:600]}"
+        )
+    feedback = r.json().get("feedback") or []
+    next_offset = offset + len(feedback) if len(feedback) == count else None
+    return feedback, next_offset
+
+
+# --- MusicBrainz: recording MBID -> ISRC (the inverse of resolve_isrc_to_mbid) --
+
+def first_isrc(payload: dict[str, Any]) -> str:
+    """Pure: the first ISRC from a MusicBrainz `/recording/{mbid}?inc=isrcs`
+    response, or "" when the recording has none (caller drops it — an ISRC-less
+    recording has no stable cross-service key)."""
+    for isrc in payload.get("isrcs") or []:
+        if isrc:
+            return isrc
+    return ""
+
+
+async def recording_isrc(
+    client: httpx.AsyncClient, mbid: str, *, user_agent: str
+) -> str:
+    """Resolve a recording MBID to an ISRC via MusicBrainz, or "" if it has none.
+    `user_agent` is REQUIRED by MusicBrainz (a generic/blank UA gets 403-blocked)."""
+    if not mbid:
+        return ""
+    r = await request_with_retry(
+        client, "GET", f"{MB_BASE_URL}/recording/{mbid}",
+        headers={"User-Agent": user_agent, "Accept": "application/json"},
+        params={"inc": "isrcs", "fmt": "json"},
+    )
+    if r.status_code == 404:
+        return ""
+    if r.status_code >= 400:
+        raise DestinationHTTPError(
+            r.status_code, f"MusicBrainz GET /recording/{mbid} -> {r.status_code}: {r.text[:600]}"
+        )
+    return first_isrc(r.json())

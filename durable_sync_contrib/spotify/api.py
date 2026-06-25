@@ -58,3 +58,56 @@ def extract_isrc(track: dict[str, Any]) -> str:
 
 def artist_names(track: dict[str, Any]) -> list[str]:
     return [a.get("name", "") for a in track.get("artists", []) if a.get("name")]
+
+
+# --- write path: save tracks to "Liked Songs" (used by SpotifyDestination) ----
+
+SEARCH_PATH = "/search"
+SAVE_LIMIT = 50  # Spotify's max ids per PUT /me/tracks call.
+
+
+def first_track_id(payload: dict[str, Any]) -> str | None:
+    """Pure: the first track id from a /search response, or None if no match."""
+    items = ((payload.get("tracks") or {}).get("items")) or []
+    for item in items:
+        tid = item.get("id")
+        if tid:
+            return tid
+    return None
+
+
+async def search_track_id_by_isrc(
+    client: httpx.AsyncClient, token: str, isrc: str
+) -> str | None:
+    """Resolve an ISRC to a Spotify track id via search, or None if unknown. The
+    write side needs this because a Record carries the cross-service ISRC, but
+    Spotify saves by its own track id (the inverse of `extract_isrc` on read)."""
+    if not isrc:
+        return None
+    r = await request_with_retry(
+        client, "GET", f"{BASE_URL}{SEARCH_PATH}",
+        headers=build_headers(token),
+        params={"q": f"isrc:{isrc}", "type": "track", "limit": 1},
+    )
+    if r.status_code >= 400:
+        raise DestinationHTTPError(
+            r.status_code, f"Spotify GET {SEARCH_PATH} (isrc:{isrc}) -> {r.status_code}: {r.text[:600]}"
+        )
+    return first_track_id(r.json())
+
+
+async def save_tracks(client: httpx.AsyncClient, token: str, ids: list[str]) -> None:
+    """Save track ids to the user's Liked Songs (`PUT /me/tracks`). Idempotent on
+    Spotify's side (re-saving an already-saved track is a no-op). Needs the
+    `user-library-modify` scope."""
+    if not ids:
+        return
+    r = await request_with_retry(
+        client, "PUT", f"{BASE_URL}{SAVED_TRACKS_PATH}",
+        headers={**build_headers(token), "Content-Type": "application/json"},
+        json={"ids": ids[:SAVE_LIMIT]},
+    )
+    if r.status_code >= 400:
+        raise DestinationHTTPError(
+            r.status_code, f"Spotify PUT {SAVED_TRACKS_PATH} -> {r.status_code}: {r.text[:600]}"
+        )

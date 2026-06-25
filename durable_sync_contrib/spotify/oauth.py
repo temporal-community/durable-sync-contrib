@@ -25,8 +25,12 @@ from durable_sync.auth.oauth.flow import (  # noqa: F401  (re-exported for the b
 AUTHORIZE_ENDPOINT = "https://accounts.spotify.com/authorize"
 TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token"
 
-# Read-only access to the user's "Liked Songs" library — all this source needs.
-DEFAULT_SCOPE = "user-library-read"
+# Read + modify the user's "Liked Songs" library: read is all the SOURCE needs,
+# modify lets the DESTINATION save tracks. Requesting both here means one bootstrap
+# authorizes either direction (or a two-way sync). If you only run the source, the
+# extra scope is harmless; if you authorized read-only before adding the
+# destination, re-run the bootstrap to grant modify.
+DEFAULT_SCOPE = "user-library-read user-library-modify"
 
 # Env var holding the dashboard-registered app's client id (no secret: PKCE).
 CLIENT_ID_ENV = "SPOTIFY_CLIENT_ID"

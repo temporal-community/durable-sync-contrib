@@ -38,9 +38,11 @@ dev = ["pytest>=8.0", "python-dotenv>=1.0"]
 # nothing in an app's wiring reveals that they live out-of-repo.
 [project.entry-points."durable_sync.sources"]
 spotify = "durable_sync_contrib.spotify.source:SpotifySource"
+listenbrainz = "durable_sync_contrib.listenbrainz.source:ListenBrainzSource"
 
 [project.entry-points."durable_sync.destinations"]
 listenbrainz = "durable_sync_contrib.listenbrainz.destination:ListenBrainzDestination"
+spotify = "durable_sync_contrib.spotify.destination:SpotifyDestination"
 
 [build-system]
 requires = ["setuptools>=77"]
