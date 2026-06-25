@@ -70,6 +70,20 @@ class SpotifySource:
         # One user's Liked Songs = a single unit of work / entity workflow.
         return [SourceSpec(key="liked", interval_minutes=self._config.interval_minutes)]
 
+    # Register the workflow-owned OAuth token machinery (same pattern as Notion's
+    # destination) so ANY worker running this source also HOSTS its auth workflow —
+    # serving the access-token query the source needs. Without this the source
+    # silently relies on some other worker happening to register OAuthTokenWorkflow
+    # on a shared task queue; isolating the route onto its own queue would then
+    # orphan the auth workflow. The worker dedupes these by identity.
+    def aux_workflows(self) -> list:
+        from durable_sync.auth.oauth.workflow import OAuthTokenWorkflow
+        return [OAuthTokenWorkflow]
+
+    def aux_activities(self) -> list:
+        from durable_sync.auth.oauth.refresh import refresh_oauth_token
+        return [refresh_oauth_token]
+
     async def fetch_page(
         self, spec: SourceSpec, only_items: list[str] | None, cursor: str | None
     ) -> tuple[list[Record], str | None]:
