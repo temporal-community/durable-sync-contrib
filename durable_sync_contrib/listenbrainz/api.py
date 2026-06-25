@@ -21,6 +21,8 @@ import httpx
 from durable_sync.core import DestinationHTTPError
 from durable_sync.http import request_with_retry
 
+from durable_sync_contrib.isrc import normalize_isrc
+
 LB_BASE_URL = "https://api.listenbrainz.org"
 MB_BASE_URL = "https://musicbrainz.org/ws/2"
 LOVED = 1  # ListenBrainz feedback score for "loved"
@@ -46,8 +48,10 @@ def first_recording_mbid(payload: dict[str, Any]) -> str | None:
 async def resolve_isrc_to_mbid(
     client: httpx.AsyncClient, isrc: str, *, user_agent: str
 ) -> str | None:
-    """Resolve an ISRC to a recording MBID via MusicBrainz, or None if unknown.
-    `user_agent` is REQUIRED by MusicBrainz (a generic/blank UA gets 403-blocked)."""
+    """Resolve an ISRC to a recording MBID via MusicBrainz, or None if unknown /
+    unusable. `user_agent` is REQUIRED by MusicBrainz (a generic/blank UA gets
+    403-blocked)."""
+    isrc = normalize_isrc(isrc)
     if not isrc:
         return None
     r = await request_with_retry(
@@ -55,8 +59,14 @@ async def resolve_isrc_to_mbid(
         headers={"User-Agent": user_agent, "Accept": "application/json"},
         params={"fmt": "json"},
     )
-    if r.status_code == 404:
-        return None  # ISRC not in MusicBrainz — caller skips + logs.
+    # 404 = ISRC unknown to MusicBrainz; 400 = MusicBrainz rejected it as malformed.
+    # Either way THIS record can't resolve — skip it (return None) so one bad ISRC
+    # never fails the whole batch. (Normalization above fixes the common cause —
+    # Spotify's lowercase ISRCs — but a genuinely malformed one still 400s.)
+    if r.status_code in (400, 404):
+        if r.status_code == 400:
+            log.warning("MusicBrainz rejected ISRC %r as invalid (400) — skipping", isrc)
+        return None
     if r.status_code >= 400:
         raise DestinationHTTPError(
             r.status_code, f"MusicBrainz GET /isrc/{isrc} -> {r.status_code}: {r.text[:600]}"

@@ -60,11 +60,11 @@ def test_spotify_to_listenbrainz_creates_then_idempotent(monkeypatch):
 
     # Spotify SOURCE: a fixed liked library (one page).
     async def liked_page(client, token, *, offset=0, limit=50):
-        return [_liked("ISRC-A", "ta", "Alpha"), _liked("ISRC-B", "tb", "Beta")], None
+        return [_liked("ISRCA", "ta", "Alpha"), _liked("ISRCB", "tb", "Beta")], None
     monkeypatch.setattr(sapi, "list_saved_tracks_page", liked_page)
 
     # ListenBrainz DESTINATION: stub MusicBrainz resolve + feedback submit/read.
-    mb = {"ISRC-A": "mbid-a", "ISRC-B": "mbid-b"}
+    mb = {"ISRCA": "mbid-a", "ISRCB": "mbid-b"}
     submitted: list[str] = []
     async def resolve(client, isrc, *, user_agent): return mb.get(isrc)
     async def submit(client, token, mbid, *, score=1): submitted.append(mbid)
@@ -98,7 +98,7 @@ def test_listenbrainz_to_spotify_creates_then_idempotent(monkeypatch):
         {"recording_mbid": "m-b", "created": 1709294400,
          "track_metadata": {"track_name": "Beta", "artist_name": "Artist"}},
     ]
-    mbid_isrc = {"m-a": "ISRC-A", "m-b": "ISRC-B"}
+    mbid_isrc = {"m-a": "ISRCA", "m-b": "ISRCB"}
     async def list_loved(client, user_name, *, token="", offset=0, count=100):
         return loved, None
     async def rec_isrc(client, mbid, *, user_agent): return mbid_isrc.get(mbid, "")
@@ -107,7 +107,7 @@ def test_listenbrainz_to_spotify_creates_then_idempotent(monkeypatch):
 
     # Spotify DESTINATION: a MUTABLE fake library so idempotency is real across passes.
     library: dict[str, str] = {}                 # isrc -> track id (already saved)
-    search = {"ISRC-A": "ta", "ISRC-B": "tb"}    # isrc -> resolvable track id
+    search = {"ISRCA": "ta", "ISRCB": "tb"}    # isrc -> resolvable track id
     saves: list[str] = []
     async def saved_page(client, token, *, offset=0, limit=50):
         items = [{"track": {"id": tid, "external_ids": {"isrc": isrc}}}
@@ -130,7 +130,7 @@ def test_listenbrainz_to_spotify_creates_then_idempotent(monkeypatch):
     first = asyncio.run(_drive(source, dest))
     assert first == {"created": 2, "updated": 0, "skipped": 0}
     assert sorted(saves) == ["ta", "tb"]
-    assert library == {"ISRC-A": "ta", "ISRC-B": "tb"}
+    assert library == {"ISRCA": "ta", "ISRCB": "tb"}
 
     # Second pass: the library now contains both, so the spine updates (no-op) and
     # NO new saves happen — idempotent against the user's real Spotify library.

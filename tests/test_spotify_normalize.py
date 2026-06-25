@@ -45,6 +45,15 @@ def test_missing_isrc_is_dropped():
     assert SpotifySource()._to_record(_item(external_ids={"isrc": ""})) is None
 
 
+def test_lowercase_isrc_is_normalized_uppercase():
+    # Spotify occasionally returns lowercase ISRCs; MusicBrainz rejects those as
+    # invalid (400). Normalize so the same track keys identically across services.
+    rec = SpotifySource()._to_record(_item(external_ids={"isrc": "usl4q1981736"}))
+    assert rec is not None
+    assert rec.primary_key == "USL4Q1981736"
+    assert rec.properties["Source ID"] == "USL4Q1981736"
+
+
 def test_untitled_and_no_artists():
     rec = SpotifySource()._to_record(
         {"added_at": "2024-01-01T00:00:00Z",

@@ -37,8 +37,8 @@ def test_first_track_id():
 
 def test_query_existing_ids_maps_isrc_to_id(monkeypatch):
     pages = {
-        0: ([_saved_item("ISRC-A", "ta"), _saved_item("ISRC-B", "tb")], 2),
-        2: ([_saved_item("ISRC-C", "tc")], None),
+        0: ([_saved_item("ISRCA", "ta"), _saved_item("ISRCB", "tb")], 2),
+        2: ([_saved_item("ISRCC", "tc")], None),
     }
 
     async def fake_page(client, token, *, offset=0, limit=50):
@@ -48,7 +48,7 @@ def test_query_existing_ids_maps_isrc_to_id(monkeypatch):
 
     async def run():
         async with _dest().connect() as s:
-            assert await s.query_existing_ids() == {"ISRC-A": "ta", "ISRC-B": "tb", "ISRC-C": "tc"}
+            assert await s.query_existing_ids() == {"ISRCA": "ta", "ISRCB": "tb", "ISRCC": "tc"}
     asyncio.run(run())
 
 
@@ -58,7 +58,7 @@ def test_create_resolves_isrc_then_saves(monkeypatch):
     saved: list[str] = []
 
     async def fake_search(client, token, isrc):
-        return {"ISRC-A": "ta"}.get(isrc)
+        return {"ISRCA": "ta"}.get(isrc)
 
     async def fake_save(client, token, ids):
         saved.extend(ids)
@@ -68,7 +68,7 @@ def test_create_resolves_isrc_then_saves(monkeypatch):
 
     async def run():
         async with _dest().connect() as s:
-            wrote = await s.create(Record(primary_key="ISRC-A", properties={"Name": "A"}), NOW)
+            wrote = await s.create(Record(primary_key="ISRCA", properties={"Name": "A"}), NOW)
             assert wrote is True
             assert saved == ["ta"]
     asyncio.run(run())
@@ -88,7 +88,7 @@ def test_create_unresolvable_isrc_is_skipped_no_save(monkeypatch):
 
     async def run():
         async with _dest().connect() as s:
-            wrote = await s.create(Record(primary_key="ISRC-X", properties={"Name": "?"}), NOW)
+            wrote = await s.create(Record(primary_key="ISRCX", properties={"Name": "?"}), NOW)
             assert wrote is False          # skipped, not created
             assert saved == []             # nothing saved
     asyncio.run(run())
@@ -97,5 +97,5 @@ def test_create_unresolvable_isrc_is_skipped_no_save(monkeypatch):
 def test_update_is_noop():
     async def run():
         async with _dest().connect() as s:
-            assert await s.update("ta", Record(primary_key="ISRC-A", properties={}), NOW) is False
+            assert await s.update("ta", Record(primary_key="ISRCA", properties={}), NOW) is False
     asyncio.run(run())

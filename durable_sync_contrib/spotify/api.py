@@ -14,6 +14,8 @@ import httpx
 from durable_sync.core import DestinationHTTPError
 from durable_sync.http import request_with_retry
 
+from durable_sync_contrib.isrc import normalize_isrc
+
 BASE_URL = "https://api.spotify.com/v1"
 SAVED_TRACKS_PATH = "/me/tracks"
 PAGE_LIMIT = 50  # Spotify's max page size for this endpoint.
@@ -52,8 +54,9 @@ async def list_saved_tracks_page(
 def extract_isrc(track: dict[str, Any]) -> str:
     """The track's ISRC (International Standard Recording Code) — the cross-service
     identity used as the Record primary_key — or "" when absent (local files and
-    some releases have none; the source drops those)."""
-    return (track.get("external_ids") or {}).get("isrc", "") or ""
+    some releases have none; the source drops those). Normalized (see
+    `normalize_isrc`) because Spotify sometimes returns ISRCs lowercase."""
+    return normalize_isrc((track.get("external_ids") or {}).get("isrc", ""))
 
 
 def artist_names(track: dict[str, Any]) -> list[str]:
