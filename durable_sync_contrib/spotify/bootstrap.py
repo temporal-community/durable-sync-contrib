@@ -69,6 +69,10 @@ def main() -> None:
     url = oauth.build_authorize_url(
         oauth.AUTHORIZE_ENDPOINT, client_id, REDIRECT_URI, challenge, state,
         scope=oauth.DEFAULT_SCOPE,
+        # Force Spotify's consent screen. Without this, re-authorizing an already-
+        # authorized app silently reuses the cached grant + OLD scopes, so adding
+        # user-library-modify would never take effect.
+        extra_params={"show_dialog": "true"},
     )
 
     print(f"\nOpening your browser to authorize as yourself:\n  {url}\n")
