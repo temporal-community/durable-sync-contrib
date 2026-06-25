@@ -99,6 +99,32 @@ async def search_track_id_by_isrc(
     return first_track_id(r.json())
 
 
+async def search_track_id_by_name(
+    client: httpx.AsyncClient, token: str, title: str, artist: str = ""
+) -> str | None:
+    """Resolve a track id by title (+ optional artist) — the FALLBACK when ISRC
+    search misses. A recording has many ISRCs across releases, and MusicBrainz's
+    ISRC for a recording is frequently not the one Spotify indexes (e.g. Blinding
+    Lights: MB US23A8017264 vs Spotify USSM12200612), so an ISRC miss doesn't mean
+    the track is absent. This is fuzzier than ISRC (could match a remix/live cut),
+    so it's a deliberate fallback, never the primary path."""
+    if not title:
+        return None
+    q = f'track:"{title}"'
+    if artist:
+        q += f' artist:"{artist}"'
+    r = await request_with_retry(
+        client, "GET", f"{BASE_URL}{SEARCH_PATH}",
+        headers=build_headers(token),
+        params={"q": q, "type": "track", "limit": 1},
+    )
+    if r.status_code >= 400:
+        raise DestinationHTTPError(
+            r.status_code, f"Spotify GET {SEARCH_PATH} (name) -> {r.status_code}: {r.text[:600]}"
+        )
+    return first_track_id(r.json())
+
+
 async def save_tracks(client: httpx.AsyncClient, token: str, ids: list[str]) -> None:
     """Save track ids to the user's Liked Songs (`PUT /me/tracks`). Idempotent on
     Spotify's side (re-saving an already-saved track is a no-op). Needs the

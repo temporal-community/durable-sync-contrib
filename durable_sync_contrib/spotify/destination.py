@@ -109,6 +109,15 @@ class _SpotifySession:
         isrc = record.primary_key
         track_id = await api.search_track_id_by_isrc(self._client, self._token, isrc)
         if not track_id:
+            # ISRC miss is common: MusicBrainz's ISRC for a recording often differs
+            # from Spotify's, so fall back to a title+artist search before giving up.
+            title = record.properties.get("Name") or record.properties.get("Title") or ""
+            artist = record.properties.get("Author") or ""
+            track_id = await api.search_track_id_by_name(self._client, self._token, title, artist)
+            if track_id:
+                log.info("ISRC %s not on Spotify; matched by name %r / %r -> %s",
+                         isrc, title, artist, track_id)
+        if not track_id:
             log.warning("No Spotify track for ISRC %s (%r) — skipping",
                         isrc, record.properties.get("Name", ""))
             return False  # SKIPPED — unresolvable on Spotify; tallied as skipped.

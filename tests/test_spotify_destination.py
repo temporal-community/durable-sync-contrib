@@ -74,16 +74,51 @@ def test_create_resolves_isrc_then_saves(monkeypatch):
     asyncio.run(run())
 
 
+def test_create_falls_back_to_name_when_isrc_misses(monkeypatch):
+    # MB's ISRC differs from Spotify's for the same recording -> ISRC search misses,
+    # but a name+artist search finds it (the Blinding Lights case).
+    saved: list[str] = []
+    calls: list[str] = []
+
+    async def fake_isrc(client, token, isrc):
+        calls.append("isrc")
+        return None  # miss
+
+    async def fake_name(client, token, title, artist=""):
+        calls.append(f"name:{title}/{artist}")
+        return "ta" if title == "Blinding Lights" else None
+
+    async def fake_save(client, token, ids):
+        saved.extend(ids)
+
+    monkeypatch.setattr(api, "search_track_id_by_isrc", fake_isrc)
+    monkeypatch.setattr(api, "search_track_id_by_name", fake_name)
+    monkeypatch.setattr(api, "save_tracks", fake_save)
+
+    async def run():
+        async with _dest().connect() as s:
+            rec = Record(primary_key="US23A8017264",
+                         properties={"Name": "Blinding Lights", "Author": "The Weeknd"})
+            assert await s.create(rec, NOW) is True
+            assert saved == ["ta"]
+            assert calls == ["isrc", "name:Blinding Lights/The Weeknd"]  # isrc first, then fallback
+    asyncio.run(run())
+
+
 def test_create_unresolvable_isrc_is_skipped_no_save(monkeypatch):
     saved: list[str] = []
 
     async def fake_search(client, token, isrc):
         return None  # Spotify has no track for this ISRC
 
+    async def fake_name(client, token, title, artist=""):
+        return None  # ...and the name fallback also finds nothing
+
     async def fake_save(client, token, ids):
         saved.extend(ids)
 
     monkeypatch.setattr(api, "search_track_id_by_isrc", fake_search)
+    monkeypatch.setattr(api, "search_track_id_by_name", fake_name)
     monkeypatch.setattr(api, "save_tracks", fake_save)
 
     async def run():
