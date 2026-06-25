@@ -60,6 +60,21 @@ class SpotifyDestination:
         async with httpx.AsyncClient(timeout=30) as client:
             yield _SpotifySession(client, token)
 
+    # Same self-contained-auth pattern as SpotifySource: a worker running this
+    # destination hosts its own OAuthTokenWorkflow + refresh activity, so it can
+    # serve the access-token query on its own task queue. (The token workflow is a
+    # single shared instance per Spotify account — durable-sync:spotify-auth — so
+    # when source and destination run on separate queues, only the worker on the
+    # queue where that instance lives serves it; registering the class here keeps
+    # the destination self-contained when it's the one hosting it.)
+    def aux_workflows(self) -> list:
+        from durable_sync.auth.oauth.workflow import OAuthTokenWorkflow
+        return [OAuthTokenWorkflow]
+
+    def aux_activities(self) -> list:
+        from durable_sync.auth.oauth.refresh import refresh_oauth_token
+        return [refresh_oauth_token]
+
     @staticmethod
     def is_auth_error(err: BaseException) -> bool:
         """A lapsed/revoked token or a missing scope (401/403). Shared matcher."""
