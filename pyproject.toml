@@ -1,0 +1,53 @@
+[project]
+name = "durable-sync-contrib"
+version = "0.1.0"
+description = "Off-domain / experimental connectors for durable-sync (Spotify, ListenBrainz, …)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Angie Byron", email = "angela.byron@temporal.io" }]
+keywords = ["temporal", "sync", "durable-sync", "connectors", "spotify", "listenbrainz", "musicbrainz"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Framework :: AsyncIO",
+    "Topic :: Software Development :: Libraries",
+]
+# durable-sync>=0.3 is the release that carries the connector contract / entry-point
+# registry (CONTRACT_VERSION >= 1) these connectors depend on. httpx/requests are the
+# connectors' own transport + OAuth-bootstrap deps.
+dependencies = [
+    "durable-sync>=0.3",
+    "httpx>=0.27",
+    "requests>=2.31",
+]
+
+[project.urls]
+Homepage = "https://github.com/temporal-community/durable-sync-contrib"
+Repository = "https://github.com/temporal-community/durable-sync-contrib"
+Issues = "https://github.com/temporal-community/durable-sync-contrib/issues"
+Core = "https://github.com/temporal-community/durable-sync"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "python-dotenv>=1.0"]
+
+# Discovered by durable-sync's registry (durable_sync.registry). An app resolves
+# these by name — load_source("spotify") / load_destination("listenbrainz") — so
+# nothing in an app's wiring reveals that they live out-of-repo.
+[project.entry-points."durable_sync.sources"]
+spotify = "durable_sync_contrib.spotify.source:SpotifySource"
+
+[project.entry-points."durable_sync.destinations"]
+listenbrainz = "durable_sync_contrib.listenbrainz.destination:ListenBrainzDestination"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["durable_sync_contrib*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
